@@ -1,0 +1,12 @@
+# Copy this file to android/key.properties and fill in real values.
+# NEVER commit key.properties or the .jks keystore file to git.
+#
+# Generate a keystore with:
+#   keytool -genkey -v -keystore ~/sudvet-release.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 \
+#     -alias sudvet
+#
+storePassword=your-keystore-password
+keyPassword=your-key-password
+keyAlias=sudvet
+storeFile=/absolute/path/to/sudvet-release.jks

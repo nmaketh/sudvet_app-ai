@@ -1,0 +1,76 @@
+﻿services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  ml:
+    build:
+      context: ../cattle_disease_ml
+    restart: unless-stopped
+    environment:
+      ML_CONFIG_PATH: /app/ml/configs/config.yaml
+      PYTHONPATH: /app/ml
+    expose:
+      - "8000"
+
+  mobile_api:
+    build:
+      context: ../mobile_api
+    restart: unless-stopped
+    env_file:
+      - path: ../mobile_api/.env.production
+        required: false
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      ml:
+        condition: service_started
+
+  ops_api:
+    build:
+      context: ../ops_api
+    restart: unless-stopped
+    env_file:
+      - path: ../ops_api/.env.production
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      ML_SERVICE_URL: http://ml:8000
+      RUN_MIGRATIONS_ON_START: "true"
+      RUN_SEED_ON_START: "false"
+    ports:
+      - "127.0.0.1:8002:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      ml:
+        condition: service_started
+    volumes:
+      - ops_api_uploads:/app/uploads
+
+  dashboard:
+    build:
+      context: ../dashboard
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${DASHBOARD_PUBLIC_API_URL:-http://127.0.0.1:8002}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      ops_api:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  ops_api_uploads:

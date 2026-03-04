@@ -1,0 +1,96 @@
+﻿# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Android signing — never commit the keystore or key.properties
+android/key.properties
+*.jks
+*.keystore
+
+# Python / FastAPI
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+**/.venv311/
+**/*.db
+api/.env
+api/uploads/
+
+# Node / Next.js dashboards
+**/node_modules/
+**/.next/
+dashboard/.env.local
+dashboard/.env.*.local
+
+# Local logs / temp files
+*.pid
+*.out
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Stray local scratch files
+/1
+
+# Service-specific local runtime files (legacy + renamed paths)
+backend/env
+backend/cattle_backend.db
+mobile_api/env
+mobile_api/.env.local.ps1
+mobile_api/cattle_backend.db
+mobile_api/*.db
+ops_api/.env
+ops_api/uploads/
+
+# Root compose secrets file (copy from .env.example and fill in)
+/.env
+
+# Legacy backend compatibility shim (track only docs/launcher; ignore local runtime state)
+/backend/*
+!/backend/README.md
+!/backend/run_backend.ps1
+.claude/

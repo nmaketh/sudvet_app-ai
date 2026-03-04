@@ -1,0 +1,98 @@
+services:
+  mobile_api:
+    build:
+      context: ./mobile_api
+    container_name: cattle_ai_mobile_api
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      CORS_ALLOW_ALL: ${MOBILE_CORS_ALLOW_ALL:-false}
+      CORS_ORIGINS: ${MOBILE_CORS_ORIGINS:-}
+      INFERENCE_API_URL: http://ml:8000
+      INFERENCE_ALLOW_RULES_FALLBACK: "true"
+      INFERENCE_STRICT_MODE: "false"
+    ports:
+      - "8000:8000"
+    depends_on:
+      ml:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL is hosted on Supabase — no local db container needed.
+  # Set DATABASE_URL in .env to your Supabase session-mode pooler connection string.
+
+  ml:
+    build:
+      context: ./cattle_disease_ml
+    container_name: cattle_ai_ml
+    restart: unless-stopped
+    environment:
+      ML_CONFIG_PATH: /app/ml/configs/config.yaml
+      PYTHONPATH: /app/ml
+    ports:
+      - "8001:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  ops_api:
+    build:
+      context: ./ops_api
+    container_name: cattle_ai_ops_api
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      # Supabase PostgreSQL — session-mode pooler URI (port 5432)
+      DATABASE_URL: ${DATABASE_URL}
+      SECRET_KEY: ${OPS_SECRET_KEY}
+      CORS_ORIGINS: ${OPS_CORS_ORIGINS:-http://localhost:3000}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8002}
+      VET_CAN_VIEW_ALL: ${VET_CAN_VIEW_ALL:-true}
+      ML_SERVICE_URL: http://ml:8000
+      RUN_MIGRATIONS_ON_START: "true"
+      # IMPORTANT: set to false in production — seed creates default test users
+      RUN_SEED_ON_START: ${RUN_SEED_ON_START:-false}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      # Supabase Storage
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-case-images}
+      # SMTP (optional — OTP emails)
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    ports:
+      - "8002:8000"
+    depends_on:
+      ml:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  dashboard:
+    build:
+      context: ./dashboard
+    container_name: cattle_ai_dashboard
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8002}
+    ports:
+      - "3000:3000"
+    depends_on:
+      ops_api:
+        condition: service_healthy
+      mobile_api:
+        condition: service_healthy

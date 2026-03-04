@@ -1,0 +1,33 @@
+﻿name: Compose Validate
+
+on:
+  pull_request:
+    paths:
+      - 'docker-compose.yml'
+      - 'dashboard/**'
+      - 'ops_api/**'
+      - 'cattle_disease_ml/**'
+  push:
+    branches: ["**"]
+    paths:
+      - 'docker-compose.yml'
+      - '.github/workflows/compose-validate.yml'
+
+jobs:
+  compose-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docker version
+        run: docker --version
+      - name: Compose version
+        run: docker compose version
+      - name: Validate compose file
+        run: docker compose config > /tmp/compose.out
+      - name: Validate production compose template
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cattle_ai
+          DASHBOARD_PUBLIC_API_URL: https://api.example.com
+        run: docker compose -f deploy/docker-compose.prod.yml config > /tmp/compose-prod.out

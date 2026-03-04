@@ -1,0 +1,163 @@
+﻿name: Monorepo CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  flutter:
+    name: Flutter Analyze/Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Flutter pub get
+        run: flutter pub get
+      - name: Flutter analyze
+        run: flutter analyze
+      - name: Flutter test
+        run: flutter test
+
+  dashboard:
+    name: Dashboard Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - name: Install deps
+        run: npm ci
+      - name: Build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8002
+        run: npm run build
+
+  mobile_api:
+    name: Mobile API Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile_api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: pip install -r requirements-dev.txt
+      - name: Compile Python sources
+        run: python -m compileall app
+      - name: Import app module
+        run: python -c "import app.main"
+      - name: Run tests
+        run: pytest -q
+
+  ops_api:
+    name: Ops API Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ops_api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: pip install -r requirements-dev.txt
+      - name: Compile Python sources
+        run: python -m compileall app
+      - name: Import app module
+        run: python -c "import app.main"
+      - name: Alembic upgrade dry-run env parse
+        run: python -c "from app.core.config import settings; print(settings.app_name)"
+      - name: Run tests
+        run: pytest -q
+
+  # ── Deploy to production (only on push to main, after all checks pass) ──────
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [flutter, dashboard, mobile_api, ops_api]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Build and push Docker images to GitHub Container Registry ───────────
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push mobile_api
+        uses: docker/build-push-action@v6
+        with:
+          context: ./mobile_api
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/cattle-ai/mobile_api:latest
+            ghcr.io/${{ github.repository_owner }}/cattle-ai/mobile_api:${{ github.sha }}
+
+      - name: Build and push ops_api
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ops_api
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/cattle-ai/ops_api:latest
+            ghcr.io/${{ github.repository_owner }}/cattle-ai/ops_api:${{ github.sha }}
+
+      - name: Build and push ml
+        uses: docker/build-push-action@v6
+        with:
+          context: ./cattle_disease_ml
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/cattle-ai/ml:latest
+            ghcr.io/${{ github.repository_owner }}/cattle-ai/ml:${{ github.sha }}
+
+      - name: Build and push dashboard
+        uses: docker/build-push-action@v6
+        with:
+          context: ./dashboard
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/cattle-ai/dashboard:latest
+            ghcr.io/${{ github.repository_owner }}/cattle-ai/dashboard:${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+
+      # ── SSH into the server and pull + restart containers ───────────────────
+      # Required GitHub Secrets:
+      #   SSH_HOST        — server IP or hostname
+      #   SSH_USER        — SSH username (e.g. ubuntu)
+      #   SSH_PRIVATE_KEY — private key for SSH access
+      #   NEXT_PUBLIC_API_URL — dashboard → ops_api URL (https://your-api-domain.com)
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/cattle-ai
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker image prune -f

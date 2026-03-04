@@ -1,0 +1,16 @@
+﻿[Unit]
+Description=Cattle AI Ops API (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/cattle_disease_app/ops_api
+EnvironmentFile=/etc/cattle-ai/ops_api.env
+ExecStart=/opt/cattle_disease_app/ops_api/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8002
+Restart=always
+RestartSec=5
+User=www-data
+Group=www-data
+
+[Install]
+WantedBy=multi-user.target
